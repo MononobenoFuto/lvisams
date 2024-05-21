@@ -122,7 +122,18 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         reduceVector(cur_un_pts, status);
         reduceVector(track_cnt, status);
         ROS_DEBUG("temporal optical flow costs: %fms", t_o.toc());
+
+
+        _cur_pts.clear(); _prev_pts.clear();
+        for(const auto & point: forw_pts) {
+            _cur_pts.push_back(cv::KeyPoint(point, 1.0));
+        }
+        for(const auto & point: cur_pts) {
+            _prev_pts.push_back(cv::KeyPoint(point, 1.0));
+        }
     }
+
+
 
     for (auto &n : track_cnt)
         n++;

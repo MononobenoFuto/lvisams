@@ -62,6 +62,8 @@ public:
     double prev_time;
 
     static int n_id;
+
+    vector<cv::KeyPoint> _cur_pts, _prev_pts;
 };
 
 class DepthRegister

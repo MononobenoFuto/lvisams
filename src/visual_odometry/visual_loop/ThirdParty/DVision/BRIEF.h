@@ -30,6 +30,7 @@
 #define __D_BRIEF__
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp> //ubuntu20.04
 #include <vector>
 #include <boost/dynamic_bitset.hpp>
 

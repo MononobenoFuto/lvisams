@@ -1,4 +1,5 @@
 #include "feature_tracker.h"
+#include "lvi_sam/cloud_info.h"
 
 #define SHOW_UNDISTORTION 0
 
@@ -20,6 +21,7 @@ DepthRegister *depthRegister;
 ros::Publisher pub_feature;
 ros::Publisher pub_match;
 ros::Publisher pub_restart;
+ros::Publisher pub_linematch;
 
 // feature tracker variables
 FeatureTracker trackerData[NUM_OF_CAM];
@@ -29,7 +31,27 @@ bool first_image_flag = true;
 double last_image_time = 0;
 bool init_pub = 0;
 
+//time
+// 05:1317354879.232045
+// 06:1317355707.749201
+// 07:1317357625.557814
+// 08:1317359625.557814
+ros::Time T1;
+float _T1 = 1317357625.557814;
+float match_quality;
+ros::Subscriber sub_time;
+#define PRINT_MATCHES 0
+#define PRINT_MATCH_DOTS 1
 
+std::string Float2Str(double x) {
+    int a = static_cast<int>(x);
+    int b = static_cast<int>((x - a) * 10000.0);
+    a %= 10000;
+    std::string sa = std::to_string(a);
+    std::string sb = std::to_string(b);
+    for(int i = sb.length(); i < 4; ++i) sb = "0" + sb;
+    return sa + "." + sb;
+}
 
 void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
@@ -86,6 +108,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     }
     else
         ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
+
 
     cv::Mat show_img = ptr->image;
     TicToc t_r;
@@ -175,6 +198,32 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 
         sensor_msgs::ChannelFloat32 depth_of_points = depthRegister->get_depth(img_msg->header.stamp, show_img, depth_cloud_temp, trackerData[0].m_camera, feature_points->points);
         feature_points->channels.push_back(depth_of_points);
+
+        // ROS_WARN("feature image time  = %f", feature_points->header.stamp.toSec());
+        // float delta_time = (feature_points->header.stamp-T1).toSec();
+        float delta_time = feature_points->header.stamp.toSec() - _T1;
+        bool abnormal = 0;
+        match_quality = 0;
+        // std::ifstream file("/home/nyamori/catkin_ws/info/07_3/keys.txt");
+
+        // if (file.is_open()) // 检查文件是否成功打开
+        // {
+        //     std::string line;
+        //     while (std::getline(file, line)) // 逐行读取文件内容
+        //     {
+        //         std::istringstream iss(line); // 创建字符串流
+        //         float num1, num2;
+        //         iss >> num1 >> num2;
+        //         if((delta_time > (num1-0.1)) && (delta_time < (num2+0.1))) {
+        //             abnormal = 1; break;
+        //         }
+        //     }
+        //     file.close();
+        // } else {
+        //     ROS_WARN("Failed to open the file.");
+        // }
+        // ROS_WARN("ima no jikan=%f hen = %d", delta_time, abnormal);
+
         
         // skip the first image; since no optical speed on frist image
         if (!init_pub)
@@ -190,6 +239,9 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
             ptr = cv_bridge::cvtColor(ptr, sensor_msgs::image_encodings::RGB8);
             //cv::Mat stereo_img(ROW * NUM_OF_CAM, COL, CV_8UC3);
             cv::Mat stereo_img = ptr->image;
+            // cv::Mat stereo_img = trackerData[0].cur_img;
+            cv::Mat cur_img = trackerData[0].cur_img;
+            cv::Mat prev_img = trackerData[0].prev_img;
 
             for (int i = 0; i < NUM_OF_CAM; i++)
             {
@@ -200,8 +252,9 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 {
                     if (SHOW_TRACK)
                     {
-                        // track count
+                        // track match_quality
                         double len = std::min(1.0, 1.0 * trackerData[i].track_cnt[j] / WINDOW_SIZE);
+                        match_quality = match_quality + len;
                         cv::circle(tmp_img, trackerData[i].cur_pts[j], 4, cv::Scalar(255 * (1 - len), 255 * len, 0), 4);
                     } else {
                         // depth 
@@ -216,7 +269,50 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 }
             }
 
+
+            cv::cvtColor(cur_img, cur_img, CV_GRAY2RGB);
+            cv::cvtColor(prev_img, prev_img, CV_GRAY2RGB);
+            cv::Mat matched_img;
+            std::vector<cv::DMatch>  matches;
+            for(size_t i = 0; i < trackerData[0]._cur_pts.size(); ++i) matches.push_back(cv::DMatch(i, i, 0));
+            cv::drawMatches(cur_img, trackerData[0]._cur_pts, prev_img, trackerData[0]._prev_pts, matches, matched_img);
+            sensor_msgs::ImagePtr lineMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", matched_img).toImageMsg();
             pub_match.publish(ptr->toImageMsg());
+            pub_linematch.publish(lineMsg);
+
+
+            /*if(abnormal) {
+                ROS_WARN("%d", matches.size());
+                std::string matched_img_name = "/home/nyamori/catkin_ws/info/07_3/output_" + std::to_string(delta_time) + ".jpg";
+                cv::imwrite(matched_img_name, matched_img);
+            }*/
+
+            if(PRINT_MATCH_DOTS) {
+                std::string filePrefix = "/media/nyamori/8856D74A56D73820/vslam/dataset/07/";
+
+                //cur_img, prev_img
+                std::string filename = Float2Str(img_msg->header.stamp.toSec());
+                // ROS_WARN("%f %s",img_msg->header.stamp.toSec(),  filename);
+                cv::imwrite(filePrefix + filename + "_cur.jpg", trackerData[0].cur_img);
+                cv::imwrite(filePrefix + filename + "_prev.jpg", trackerData[0].prev_img);
+                std::ofstream mFile(filePrefix + filename + ".txt", std::ios::out|std::ios::app);
+                mFile << trackerData[0]._cur_pts.size() << std::endl;
+                for(size_t i = 0; i < trackerData[0]._cur_pts.size(); ++i) {
+                    mFile << int(trackerData[0]._cur_pts[i].pt.x) << ' ' << int(trackerData[0]._cur_pts[i].pt.y) << ' ';
+                    mFile << int(trackerData[0]._prev_pts[i].pt.x) << ' ' << int(trackerData[0]._prev_pts[i].pt.y) << std::endl;
+                }
+                mFile.close();
+
+                std::ofstream filenameList(filePrefix + "list.txt", std::ios::out|std::ios::app);
+                filenameList << filename << std::endl;
+                filenameList.close();
+            }
+
+            if(PRINT_MATCHES) {
+                std::ofstream file("/home/nyamori/catkin_ws/info/07_3/matches.csv", std::ios::out|std::ios::app);
+                file << delta_time << ',' << matches.size() << ',' << match_quality << '\n';
+                file.close();
+            }
         }
     }
 }
@@ -349,6 +445,14 @@ void lidar_callback(const sensor_msgs::PointCloud2ConstPtr& laser_msg)
     *depthCloud = *depthCloudDS;
 }
 
+// extract time stamp
+void _GetTime(const lvi_sam::cloud_infoConstPtr &msgIn)
+{
+    //_T1 = 1317359625.557814;
+    if(T1.isZero()) T1 = msgIn->header.stamp;
+    sub_time.shutdown();
+}
+
 int main(int argc, char **argv)
 {
     // initialize ROS node
@@ -386,11 +490,14 @@ int main(int argc, char **argv)
     ros::Subscriber sub_lidar = n.subscribe(POINT_CLOUD_TOPIC, 5,    lidar_callback);
     if (!USE_LIDAR)
         sub_lidar.shutdown();
+    sub_time = n.subscribe<lvi_sam::cloud_info>(PROJECT_NAME + "/lidar/feature/cloud_info", 5, &_GetTime, NULL, ros::TransportHints().tcpNoDelay());
+
 
     // messages to vins estimator
     pub_feature = n.advertise<sensor_msgs::PointCloud>(PROJECT_NAME + "/vins/feature/feature",     5);
     pub_match   = n.advertise<sensor_msgs::Image>     (PROJECT_NAME + "/vins/feature/feature_img", 5);
     pub_restart = n.advertise<std_msgs::Bool>         (PROJECT_NAME + "/vins/feature/restart",     5);
+    pub_linematch = n.advertise<sensor_msgs::Image>   (PROJECT_NAME + "/vins/feature/feature_line", 5);
 
     // two ROS spinners for parallel processing (image and lidar)
     ros::MultiThreadedSpinner spinner(2);

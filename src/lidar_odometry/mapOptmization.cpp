@@ -1595,6 +1595,80 @@ public:
                                                       tf::Vector3(transformTobeMapped[3], transformTobeMapped[4], transformTobeMapped[5]));
         tf::StampedTransform trans_odom_to_lidar = tf::StampedTransform(t_odom_to_lidar, timeLaserInfoStamp, "odom", "lidar_link");
         br.sendTransform(trans_odom_to_lidar);
+
+
+         // 保存轨迹
+         //kitti格式
+        // // 位姿输出到txt文档
+        std::ofstream pose1("/home/nyamori/catkin_ws/result/pose_kitti.txt", std::ios::app);
+        std::ofstream pose2("/home/nyamori/catkin_ws/result/time.txt", std::ios::app);
+        pose1.setf(std::ios::scientific, std::ios::floatfield);
+        pose2.setf(std::ios::scientific, std::ios::floatfield);
+        // pose1.precision(15);
+
+        //save final trajectory in the left camera coordinate system.
+        Eigen::Matrix3d rotation_matrix;
+        rotation_matrix = Eigen::AngleAxisd(transformTobeMapped[2], Eigen::Vector3d::UnitZ()) * 
+                        Eigen::AngleAxisd(transformTobeMapped[1], Eigen::Vector3d::UnitY()) * 
+                        Eigen::AngleAxisd(transformTobeMapped[0], Eigen::Vector3d::UnitX());
+        Eigen::Matrix<double, 4, 4> mylio_pose;
+        mylio_pose.topLeftCorner(3,3) = rotation_matrix;
+
+        mylio_pose(0,3) =  laserOdometryROS.pose.pose.position.x ;
+        mylio_pose(1,3) =   laserOdometryROS.pose.pose.position.y;
+        mylio_pose(2,3) =   laserOdometryROS.pose.pose.position.z;
+        Eigen::Matrix<double, 4, 4> cali_paremeter;
+        // cali_paremeter << 4.276802385584e-04, -9.999672484946e-01, -8.084491683471e-03, -1.198459927713e-02,  //00-02
+        //                	 -7.210626507497e-03, 8.081198471645e-03, -9.999413164504e-01, -5.403984729748e-02, 
+        //                   9.999738645903e-01, 4.859485810390e-04, -7.206933692422e-03, -2.921968648686e-01,
+        //                   0,                    0,                   0,                          1;
+        cali_paremeter << -1.857739385241e-03,-9.999659513510e-01, -8.039975204516e-03, -4.784029760483e-03,     //04-10
+                        -6.481465826011e-03, 8.051860151134e-03, -9.999466081774e-01, -7.337429464231e-02,
+                        9.999773098287e-01, -1.805528627661e-03, -6.496203536139e-03, -3.339968064433e-01,
+                        0,                   0,                   0,                          1;
+        /*cali_paremeter << 2.347736981471e-04, -9.999441545438e-01, -1.056347781105e-02, -2.796816941295e-03,    // 03
+                            1.044940741659e-02, 1.056535364138e-02, -9.998895741176e-01, -7.510879138296e-02, 
+                            9.999453885620e-01, 1.243653783865e-04, 1.045130299567e-02, -2.721327964059e-01,
+                            0,                     0,                   0,                          1;*/
+                
+        Eigen::Matrix<double, 4, 4> myloam_pose_f;
+        myloam_pose_f = cali_paremeter * mylio_pose * cali_paremeter.inverse();
+
+        pose1 << myloam_pose_f(0,0) << " " << myloam_pose_f(0,1) << " " << myloam_pose_f(0,2) << " " << myloam_pose_f(0,3) << " "
+            << myloam_pose_f(1,0) << " " << myloam_pose_f(1,1) << " " << myloam_pose_f(1,2) << " " << myloam_pose_f(1,3) << " "
+            << myloam_pose_f(2,0) << " " << myloam_pose_f(2,1) << " " << myloam_pose_f(2,2) << " " << myloam_pose_f(2,3) << std::endl;
+
+        static auto T1 = timeLaserInfoStamp;
+        pose2 << laserOdometryROS.header.stamp - T1  << std::endl;
+
+        pose1.close();
+        pose2.close();
+
+        //tum格式
+        // 位姿输出到txt文档
+        std::ofstream pose0("/home/nyamori/catkin_ws/result/pose_tum.txt", std::ios::app);
+        pose0.setf(std::ios::scientific, std::ios::floatfield);
+        pose0.precision(15);
+
+        Eigen::Matrix3d temp;
+        temp = myloam_pose_f.topLeftCorner(3,3);
+        Eigen::Quaterniond quaternion(temp);
+
+        // 获取当前更新的时间 这样与ground turth对比才更准确
+   
+        // ROS_WARN("T1_origin=%f", T1.toSec());
+        // ROS_WARN("subete time  = %f", laserOdometryROS.header.stamp.toSec());
+        pose0 << laserOdometryROS.header.stamp - T1  << " "
+            << myloam_pose_f(0,3) << " "
+            << myloam_pose_f(1,3) << " "
+            << myloam_pose_f(2,3) << " "
+            << quaternion.x() << " "
+            << quaternion.y() << " "
+            << quaternion.z() << " "
+            << quaternion.w() << std::endl;
+
+        pose0.close();
+
     }
 
     void updatePath(const PointTypePose &pose_in)

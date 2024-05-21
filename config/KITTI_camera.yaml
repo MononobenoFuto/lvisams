@@ -16,18 +16,18 @@ align_camera_lidar_estimation: 1 # align camera and lidar estimation for visuali
 #camera calibration 
 model_type: PINHOLE
 camera_name: cam1
-image_width: 1242
-image_height: 375
+image_width: 1226
+image_height: 370
 distortion_parameters:
   k1: 0.0
   k2: 0.0
   p1: 0.0
   p2: 0.0
 projection_parameters:
-  fx: 7.215377e+02
-  fy: 7.215377e+02
-  cx: 6.095593e+02
-  cy: 1.728540e+02
+  fx: 7.070912e+02
+  fy: 7.070912e+02
+  cx: 6.018873e+02
+  cy: 1.831104e+02
 
 #imu parameters       The more accurate parameters you provide, the worse performance
 acc_n: 0.02         # accelerometer measurement noise standard deviation.
@@ -45,16 +45,14 @@ extrinsicRotation: !!opencv-matrix
    rows: 3
    cols: 3
    dt: d
-   data: [0.00831786,  0.0127777,   0.99988376,  
-         -0.99986477, -0.01408374,  0.00849768, 
-          0.01419068, -0.99981911,  0.01265882]   
+   data: [0.00781298, -0.0042792,  0.99996033,-0.99985947, -0.01486805,  0.00774856,0.0148343, -0.99988023, -0.00439476]
 
 #Translation from camera frame to imu frame, imu^T_cam
 extrinsicTranslation: !!opencv-matrix
    rows: 3
    cols: 1
    dt: d
-   data: [1.08330198, -0.3098889, 0.72991979]
+   data: [1.14389871,-0.31271847,  0.72654605]
 
 #feature traker paprameters
 max_cnt: 150            # max feature number in feature tracking
