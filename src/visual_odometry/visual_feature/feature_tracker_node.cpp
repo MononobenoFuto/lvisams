@@ -32,16 +32,12 @@ double last_image_time = 0;
 bool init_pub = 0;
 
 //time
-// 05:1317354879.232045
-// 06:1317355707.749201
-// 07:1317357625.557814
-// 08:1317359625.557814
 ros::Time T1;
 float _T1 = 1317357625.557814;
 float match_quality;
 ros::Subscriber sub_time;
 #define PRINT_MATCHES 0
-#define PRINT_MATCH_DOTS 1
+#define PRINT_MATCH_DOTS 0
 
 std::string Float2Str(double x) {
     int a = static_cast<int>(x);
@@ -56,6 +52,7 @@ std::string Float2Str(double x) {
 void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
     double cur_img_time = img_msg->header.stamp.toSec();
+    uint cur_seq = img_msg->header.seq;
 
     if(first_image_flag)
     {
@@ -116,7 +113,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     {
         ROS_DEBUG("processing camera %d", i);
         if (i != 1 || !STEREO_TRACK)
-            trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), cur_img_time);
+            trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), cur_img_time, cur_seq);
         else
         {
             if (EQUALIZE)

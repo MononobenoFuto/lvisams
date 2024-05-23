@@ -43,6 +43,7 @@ find_package(Ceres REQUIRED)
 find_package(GTSAM REQUIRED QUIET)
 find_package(Boost REQUIRED COMPONENTS filesystem program_options system timer)
 find_package(Boost REQUIRED COMPONENTS timer thread serialization chrono) # for ubuntu20.04
+find_package(ZLIB REQUIRED)
 
 
 ######################
@@ -52,6 +53,7 @@ add_message_files(
   DIRECTORY msg
   FILES
   cloud_info.msg
+  img_info.msg
 )
 
 generate_messages(
@@ -76,6 +78,7 @@ include_directories(
     ${CERES_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
     ${GTSAM_INCLUDE_DIR}
+    src
 )
 
 link_directories(
@@ -90,6 +93,7 @@ link_directories(
 file(GLOB visual_feature_files
     "src/visual_odometry/visual_feature/*.cpp"
     "src/visual_odometry/visual_feature/camera_models/*.cc"
+    "src/cnpy/cnpy.cpp"
 )
 file(GLOB visual_odometry_files
     "src/visual_odometry/visual_estimator/*.cpp"
@@ -108,7 +112,7 @@ file(GLOB visual_loop_files
 )
 # Visual Feature Tracker
 add_executable(${PROJECT_NAME}_visual_feature ${visual_feature_files})
-target_link_libraries(${PROJECT_NAME}_visual_feature ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_visual_feature ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ZLIB::ZLIB)
 # Visual Odometry
 add_executable(${PROJECT_NAME}_visual_odometry ${visual_odometry_files})
 target_link_libraries(${PROJECT_NAME}_visual_odometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES}) 

@@ -28,6 +28,18 @@ void reduceVector(vector<int> &v, vector<uchar> status)
     v.resize(j);
 }
 
+std::string intToStringWithLeadingZeros(uint number) {
+    std::ostringstream oss;
+    oss << std::setw(10) << std::setfill('0') << number;
+    return oss.str();
+}
+
+int getLabelId(cv::Point2f &p, int shape) {
+    int img_x = cvRound(p.x);
+    int img_y = cvRound(p.y);
+    return img_y * shape + img_x;
+}
+
 
 FeatureTracker::FeatureTracker()
 {
@@ -78,7 +90,7 @@ void FeatureTracker::addPoints()
     }
 }
 
-void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
+void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
 {
     cv::Mat img;
     TicToc t_r;
@@ -97,10 +109,12 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     if (forw_img.empty())
     {
         prev_img = cur_img = forw_img = img;
+        prev_seq = cur_seq = forw_seq = seq;
     }
     else
     {
         forw_img = img;
+        forw_seq = seq;
     }
 
     forw_pts.clear();
@@ -112,9 +126,38 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         vector<float> err;
         cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
 
-        for (int i = 0; i < int(forw_pts.size()); i++)
+        std::string cur_label_name = intToStringWithLeadingZeros(cur_seq) + ".npy";
+        std::string forw_label_name = intToStringWithLeadingZeros(forw_seq) + ".npy";
+        int del_bylabel = 0, before_label = 0;
+
+
+        cnpy::NpyArray cur_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/06_npy/" + cur_label_name);
+        cnpy::NpyArray forw_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/06_npy/" + forw_label_name);
+        int* cur_label_data = cur_label.data<int>();
+        int* forw_label_data = forw_label.data<int>();
+        std::vector<size_t> shape = cur_label.shape;
+
+
+        for (int i = 0; i < int(forw_pts.size()); i++) {
             if (status[i] && !inBorder(forw_pts[i]))
                 status[i] = 0;
+
+            if(status[i]) {
+                ++before_label;
+                status[i] = 0;
+                for(int tx = -1; tx <= 1; ++tx) for(int ty = -1; ty <= 1; ++ty)
+                if(abs(tx) + abs(ty) <= 1) {
+                    cv::Point2f forw_pts_new(forw_pts[i].x+tx, forw_pts[i].y+ty);
+                    cv::Point2f cur_pts_new(cur_pts[i].x+tx, cur_pts[i].y+ty);
+                    if(!inBorder(forw_pts_new) || !inBorder(cur_pts_new)) continue;
+                    if (forw_label_data[getLabelId(forw_pts_new, shape[1])] == cur_label_data[getLabelId(cur_pts_new, shape[1])]) {
+                        status[i] = 1;
+                    }
+                }
+                del_bylabel += (1-status[i]);
+            }
+        }
+        ROS_WARN("forw = %d cur = %d (%d/%d)\n", forw_seq, cur_seq, del_bylabel, before_label);
         reduceVector(prev_pts, status);
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
@@ -169,9 +212,11 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
     }
     prev_img = cur_img;
+    prev_seq = cur_seq;
     prev_pts = cur_pts;
     prev_un_pts = cur_un_pts;
     cur_img = forw_img;
+    cur_seq = forw_seq;
     cur_pts = forw_pts;
     undistortedPoints();
     prev_time = cur_time;

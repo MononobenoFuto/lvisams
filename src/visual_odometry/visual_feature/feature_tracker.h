@@ -15,6 +15,7 @@
 
 #include "parameters.h"
 #include "tic_toc.h"
+#include "cnpy/cnpy.h"
 
 using namespace std;
 using namespace camodocal;
@@ -30,7 +31,7 @@ class FeatureTracker
 public:
     FeatureTracker();
 
-    void readImage(const cv::Mat &_img, double _cur_time);
+    void readImage(const cv::Mat &_img, double _cur_time, uint seq);
 
     void setMask();
 
@@ -64,6 +65,8 @@ public:
     static int n_id;
 
     vector<cv::KeyPoint> _cur_pts, _prev_pts;
+
+    uint32_t cur_seq, prev_seq, forw_seq;
 };
 
 class DepthRegister
