@@ -14,6 +14,8 @@ set(CMAKE_BUILD_TYPE "Release")
 #set(CMAKE_CXX_FLAGS "-std=c++11") # for ubuntu18.04
 set(CMAKE_CXX_FLAGS "-std=c++14") # for ubuntu20.04
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g -pthread")
+set(ONNXRUNTIME_DIR /home/nyamori/myLib/onnxruntime-linux-x64-1.18.0)
+
 
 ######################
 ### Packages
@@ -44,6 +46,7 @@ find_package(GTSAM REQUIRED QUIET)
 find_package(Boost REQUIRED COMPONENTS filesystem program_options system timer)
 find_package(Boost REQUIRED COMPONENTS timer thread serialization chrono) # for ubuntu20.04
 find_package(ZLIB REQUIRED)
+# find_package(ONNXRuntime REQUIRED PATHS /home/nyamori/myLib/onnxruntime-linux-x64-1.18.0)
 
 
 ######################
@@ -78,6 +81,7 @@ include_directories(
     ${CERES_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
     ${GTSAM_INCLUDE_DIR}
+    ${ONNXRUNTIME_DIR}/include
     src
 )
 
@@ -85,6 +89,7 @@ link_directories(
     ${PCL_LIBRARY_DIRS}
     ${OpenCV_LIBRARY_DIRS}
     ${GTSAM_LIBRARY_DIRS}
+    ${ONNXRUNTIME_DIR}/lib
 )
 
 ######################
@@ -93,7 +98,7 @@ link_directories(
 file(GLOB visual_feature_files
     "src/visual_odometry/visual_feature/*.cpp"
     "src/visual_odometry/visual_feature/camera_models/*.cc"
-    "src/cnpy/cnpy.cpp"
+    "src/cnpy/cnpy.cpp" 
 )
 file(GLOB visual_odometry_files
     "src/visual_odometry/visual_estimator/*.cpp"
@@ -112,7 +117,7 @@ file(GLOB visual_loop_files
 )
 # Visual Feature Tracker
 add_executable(${PROJECT_NAME}_visual_feature ${visual_feature_files})
-target_link_libraries(${PROJECT_NAME}_visual_feature ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ZLIB::ZLIB)
+target_link_libraries(${PROJECT_NAME}_visual_feature ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ZLIB::ZLIB ${ONNXRUNTIME_DIR}/lib/libonnxruntime.so)
 # Visual Odometry
 add_executable(${PROJECT_NAME}_visual_odometry ${visual_odometry_files})
 target_link_libraries(${PROJECT_NAME}_visual_odometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES}) 
