@@ -16,6 +16,10 @@
 #include "parameters.h"
 #include "tic_toc.h"
 #include "cnpy/cnpy.h"
+#include <torch/script.h>
+#include <torch/torch.h>
+#include <chrono>
+
 
 using namespace std;
 using namespace camodocal;
@@ -61,6 +65,11 @@ public:
     camodocal::CameraPtr m_camera;
     double cur_time;
     double prev_time;
+    
+    torch::jit::script::Module module;
+    // cnpy::NpyArray cur_feature;
+    at::Tensor cur_feature;
+
 
     static int n_id;
 

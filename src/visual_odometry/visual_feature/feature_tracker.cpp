@@ -40,9 +40,25 @@ int getLabelId(cv::Point2f &p, int shape) {
     return img_y * shape + img_x;
 }
 
+torch::Tensor matToTensor(const cv::Mat& mat) {
+    // 将 cv::Mat 转换为 torch::Tensor
+    cv::Mat float_mat;
+    mat.convertTo(float_mat, CV_32F); // 将数据类型转换为 float
+    auto tensor = torch::from_blob(float_mat.data, {mat.rows, mat.cols, mat.channels()}, torch::kFloat);
+    tensor = tensor.permute({2, 0, 1}); // 调整维度顺序为 CxHxW
+    return tensor.clone(); // 复制数据以确保与 cv::Mat 数据独立
+}
 
-FeatureTracker::FeatureTracker()
-{
+FeatureTracker::FeatureTracker() {
+    try {
+        module = torch::jit::load("/home/nyamori/catkin_ws/src/LVI-SAM-Easyused/model_script.pt");
+    }
+    catch (const c10::Error& e) {
+        ROS_WARN("Error loading the model\n");
+    }
+    ROS_WARN("Model loaded successfully\n");
+    module.eval();
+
 }
 
 void FeatureTracker::setMask()
@@ -154,13 +170,92 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
 
     if (PUB_THIS_FRAME)
     {
-        rejectWithF();
         
+        torch::NoGradGuard no_grad;
+        int64_t model_h = 376, model_w = 1232, model_c = 19;
+        cv::Mat ex_forw_img;
+        cv::cvtColor(forw_img, ex_forw_img, cv::COLOR_GRAY2BGR);
+        cv::copyMakeBorder(ex_forw_img, ex_forw_img, 0, 376-370, 0, 1232-1226, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+        torch::Tensor forw_tensor = matToTensor(ex_forw_img);
+        forw_tensor = forw_tensor.unsqueeze(0);
+
+        std::vector<torch::jit::IValue> input;
+        input.push_back(forw_tensor);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        at::Tensor output = module.forward(input).toTensor();
+        auto end = std::chrono::high_resolution_clock::now();
+
+        std::vector<int64_t> output_size = {model_h, model_w};
+        at::Tensor forw_feature = torch::nn::functional::interpolate(
+                output,
+                torch::nn::functional::InterpolateFuncOptions().size(output_size).mode(torch::kBilinear).align_corners(false)
+        );
+        std::chrono::duration<double, std::milli> duration = end - start;
+        std::cout << "Function execution time: " << duration.count() << " ms" << std::endl;
+
+
+        
+
+        // if(cur_feature.defined()) {
+        //     double euc_dis_before = 0.0, cos_dis_before = 0.0;
+        //     for(int i = 0; i < int(forw_pts.size()); i++) {
+        //         double t_euc_dis = 0.0, t_cos_dis0 = 0.0, t_cos_dis1 = 0.0, t_cos_dis2 = 0.0;
+        //         for(int j = 0; j < model_c; j++) {
+        //             float x = forw_feature.index({0, j, cvRound(forw_pts[i].y), cvRound(forw_pts[i].x)}).item<float>();
+        //             float y = cur_feature.index({0, j, cvRound(cur_pts[i].y), cvRound(cur_pts[i].x)}).item<float>();
+        //             t_euc_dis += (x-y) * (x-y);
+        //             t_cos_dis0 += x*y;
+        //             t_cos_dis1 += x*x;
+        //             t_cos_dis2 += y*y;
+        //         }
+        //         euc_dis_before += std::sqrt(t_euc_dis);
+        //         cos_dis_before += t_cos_dis0 / std::sqrt(t_cos_dis1) / std::sqrt(t_cos_dis2);
+        //     }
+        //     euc_dis_before /= forw_pts.size() + 0.0;
+        //     cos_dis_before /= forw_pts.size() + 0.0;
+        //     ROS_WARN("euc_dis_before: %lf cos_dis_before: %lf\n", euc_dis_before, cos_dis_before);
+
+        // }
+
+
+
+        start = std::chrono::high_resolution_clock::now();
+        rejectWithF();
+        end = std::chrono::high_resolution_clock::now();
+        duration = end - start;
+        std::cout << "ransac time: " << duration.count() << " ms" << std::endl;
+
+
+        // if(cur_feature.defined()) {
+        //     double euc_dis_after = 0.0, cos_dis_after = 0.0;
+        //     for(int i = 0; i < int(forw_pts.size()); i++) {
+        //         double t_euc_dis = 0.0, t_cos_dis0 = 0.0, t_cos_dis1 = 0.0, t_cos_dis2 = 0.0;
+        //         for(int j = 0; j < model_c; j++) {
+        //             float x = forw_feature.index({0, j, cvRound(forw_pts[i].y), cvRound(forw_pts[i].x)}).item<float>();
+        //             float y = cur_feature.index({0, j, cvRound(cur_pts[i].y), cvRound(cur_pts[i].x)}).item<float>();
+        //             t_euc_dis += (x-y) * (x-y);
+        //             t_cos_dis0 += x*y;
+        //             t_cos_dis1 += x*x;
+        //             t_cos_dis2 += y*y;
+        //         }
+        //         euc_dis_after += std::sqrt(t_euc_dis);
+        //         cos_dis_after += t_cos_dis0 / std::sqrt(t_cos_dis1) / std::sqrt(t_cos_dis2);
+        //     }
+        //     euc_dis_after /= forw_pts.size() + 0.0;
+        //     cos_dis_after /= forw_pts.size() + 0.0;
+        //     ROS_WARN("euc_dis_after: %lf cos_dis_after: %lf\n", euc_dis_after, cos_dis_after);
+
+        // }
+
+        cur_feature = forw_feature;
+
+
         std::string cur_label_name = intToStringWithLeadingZeros(cur_seq) + ".npy";
         std::string forw_label_name = intToStringWithLeadingZeros(forw_seq) + ".npy";
 
-        cnpy::NpyArray cur_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/07_npy/" + cur_label_name);
-        cnpy::NpyArray forw_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/07_npy/" + forw_label_name);
+        cnpy::NpyArray cur_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/04_npy/" + cur_label_name);
+        cnpy::NpyArray forw_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/04_npy/" + forw_label_name);
         int* cur_label_data = cur_label.data<int>();
         int* forw_label_data = forw_label.data<int>();
         std::vector<size_t> shape = cur_label.shape;
