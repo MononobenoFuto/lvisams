@@ -10,7 +10,7 @@
 	
 	
 	<node pkg="$(arg project)" type="$(arg project)_visual_feature" name="$(arg project)_visual_feature" output="screen" respawn="true"/>
-	<node pkg="$(arg project)" type="$(arg project)_visual_odometry" name="$(arg project)_visual_odometry" output="screen" respawn="true" />
+	<node pkg="$(arg project)" type="$(arg project)_visual_odometry" name="$(arg project)_visual_odometry" output="screen" respawn="true" launch-prefix="xterm -e gdb -ex run --args "/>
 	<node pkg="$(arg project)" type="$(arg project)_visual_loop" name="$(arg project)_visual_loop" output="screen" respawn="true" />
 	<node pkg="$(arg project)" type="$(arg project)_visual_loop" name="$(arg project)_calcfeature" output="screen" respawn="true" />
 </launch>

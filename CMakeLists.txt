@@ -10,12 +10,12 @@ add_definitions(-DIF_OFFICIAL=0)
 ######################
 ### Cmake flags
 ######################
-set(CMAKE_BUILD_TYPE "Release")
-# set(CMAKE_BUILD_TYPE "Debug")
+# set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_BUILD_TYPE "Debug")
 #set(CMAKE_CXX_FLAGS "-std=c++11") # for ubuntu18.04
 set(CMAKE_CXX_FLAGS "-std=c++17") # for ubuntu20.04
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g -pthread")
-set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g -ggdb")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g -ggdb -pthread")
 # set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -g -ggdb")
 list(APPEND CMAKE_PREFIX_PATH "/home/nyamori/myLib/libtorch")
 
