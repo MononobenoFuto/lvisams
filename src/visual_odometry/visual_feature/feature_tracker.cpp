@@ -57,6 +57,7 @@ FeatureTracker::FeatureTracker() {
         ROS_WARN("Error loading the model\n");
     }
     ROS_WARN("Model loaded successfully\n");
+    module.to(torch::kCUDA);
     module.eval();
 
 }
@@ -178,6 +179,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
         cv::copyMakeBorder(ex_forw_img, ex_forw_img, 0, 376-370, 0, 1232-1226, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
         torch::Tensor forw_tensor = matToTensor(ex_forw_img);
         forw_tensor = forw_tensor.unsqueeze(0);
+        forw_tensor = forw_tensor.to(torch::kCUDA);
 
         std::vector<torch::jit::IValue> input;
         input.push_back(forw_tensor);
@@ -191,6 +193,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
                 output,
                 torch::nn::functional::InterpolateFuncOptions().size(output_size).mode(torch::kBilinear).align_corners(false)
         );
+        forw_feature = forw_feature.to(torch::kCPU);
         std::chrono::duration<double, std::milli> duration = end - start;
         std::cout << "Function execution time: " << duration.count() << " ms" << std::endl;
 
