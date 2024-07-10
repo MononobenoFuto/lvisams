@@ -122,7 +122,38 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
         TicToc t_o;
         vector<uchar> status;
         vector<float> err;
-        cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
+
+
+        std::string flow_name = intToStringWithLeadingZeros(cur_seq) + ".npy";
+        cnpy::NpyArray flow_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/flow/" + flow_name);
+
+        float* flow_data = flow_label.data<float>();
+        std::vector<size_t> shape = flow_label.shape;
+
+        for(auto &t: shape)
+            printf("%d ", t);
+        printf("\n");
+
+
+        for (int i = 0; i < int(cur_pts.size()); i++) {
+            if(!inBorder(cur_pts[i])) {
+                status.push_back(0);
+                continue;
+            } 
+            status.push_back(1);
+            int x = cvRound(cur_pts[i].x);
+            int y = cvRound(cur_pts[i].y);
+            float xx = cur_pts[i].x + flow_data[y * shape[3] + x];
+            float yy = cur_pts[i].y + flow_data[y * shape[3] + x + shape[2]*shape[3]];
+            forw_pts.push_back(cv::Point2f(xx, yy));
+        }
+
+
+        
+
+
+
+        // cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
         for (int i = 0; i < int(forw_pts.size()); i++) {
             if (status[i] && !inBorder(forw_pts[i]))
                 status[i] = 0;
@@ -153,61 +184,6 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
     if (PUB_THIS_FRAME)
     {
         rejectWithF();
-
-
-        Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "ONNXRuntimeExample");
-        Ort::SessionOptions session_options;
-        Ort::AllocatorWithDefaultOptions allocator;
-        // session_options.SetIntraOpNumThreads(1);
-        // session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
-        std::string model_path = "/home/nyamori/model.onnx";
-        Ort::Session session(env, model_path.c_str(), session_options);
-
-
-
-        //module input info
-        Ort::AllocatedStringPtr inptr = session.GetInputNameAllocated(0, allocator);
-        const char* input_name = inptr.get();
-        //input data
-        
-        int input_tensor_size = 375 * 1242 * 3;
-        std::vector<int64_t> input_node_dims = {1, 3, 375, 1242};
-        std::vector<float> forw_input_data(input_tensor_size), cur_input_data(input_tensor_size);
-        std::size_t counter = 0;
-        for (unsigned k = 0; k < 3; k++) {
-            for (unsigned i = 0; i < 375; i++) {
-                for (unsigned j = 0; j < 1242; j++)   {
-                    ++counter;
-                    if(i < forw_img.rows && j < forw_img.cols){
-                        forw_input_data[counter] = (static_cast<float>(forw_img.at<cv::Vec3b>(i, j)[k]) / 255.0 - 0.5)/0.5;
-                        cur_input_data[counter] = (static_cast<float>(cur_img.at<cv::Vec3b>(i, j)[k]) / 255.0 - 0.5)/0.5;
-                    } else {
-                        forw_input_data[counter] = cur_input_data[counter] = -1.0;
-                    }
-                }
-            }
-        }
-        ROS_WARN("1");
-
-        Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        ROS_WARN("2");
-        Ort::Value forw_input_tensor = Ort::Value::CreateTensor<float>(memory_info, forw_input_data.data(), input_tensor_size, input_node_dims.data(), input_node_dims.size());
-        Ort::Value cur_input_tensor = Ort::Value::CreateTensor<float>(memory_info, cur_input_data.data(), input_tensor_size, input_node_dims.data(), input_node_dims.size());
-        ROS_WARN("3");
-        //run
-        Ort::AllocatedStringPtr outptr = session.GetOutputNameAllocated(0, allocator);
-        const char* output_name = outptr.get();
-        ROS_WARN("4");
-        auto output_tensors = session.Run(Ort::RunOptions{nullptr}, &input_name, &forw_input_tensor, 1, &output_name, 1);
-        //process output
-        float* output_data = output_tensors.front().GetTensorMutableData<float>();
-        ROS_WARN("output size = %d\n", output_tensors.front().GetTensorTypeAndShapeInfo().GetElementCount());
-        for (size_t i = 0; i < output_tensors.front().GetTensorTypeAndShapeInfo().GetElementCount(); i++) {
-            std::cout << output_data[i] << " ";
-        }
-        ROS_WARN("5");
-
-
         
         std::string cur_label_name = intToStringWithLeadingZeros(cur_seq) + ".npy";
         std::string forw_label_name = intToStringWithLeadingZeros(forw_seq) + ".npy";

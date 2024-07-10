@@ -16,7 +16,6 @@
 #include "parameters.h"
 #include "tic_toc.h"
 #include "cnpy/cnpy.h"
-#include "onnxruntime_cxx_api.h"
 
 using namespace std;
 using namespace camodocal;
