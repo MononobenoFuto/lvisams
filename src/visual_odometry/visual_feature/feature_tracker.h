@@ -67,6 +67,9 @@ public:
     vector<cv::KeyPoint> _cur_pts, _prev_pts;
 
     uint32_t cur_seq, prev_seq, forw_seq;
+
+    vector<cv::Point2f> _forw_pts;
+    vector<uchar> isprint;
 };
 
 class DepthRegister
