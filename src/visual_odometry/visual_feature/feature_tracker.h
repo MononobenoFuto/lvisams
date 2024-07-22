@@ -16,6 +16,8 @@
 #include "parameters.h"
 #include "tic_toc.h"
 #include "cnpy/cnpy.h"
+#include <torch/script.h>
+#include <torch/torch.h>
 
 using namespace std;
 using namespace camodocal;
@@ -63,6 +65,10 @@ public:
     double prev_time;
 
     static int n_id;
+
+    torch::jit::script::Module module;
+    // cnpy::NpyArray cur_feature;
+    at::Tensor cur_feature;
 
     vector<cv::KeyPoint> _cur_pts, _prev_pts;
 

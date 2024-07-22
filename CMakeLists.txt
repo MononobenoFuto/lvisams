@@ -10,10 +10,16 @@ add_definitions(-DIF_OFFICIAL=0)
 ######################
 ### Cmake flags
 ######################
-set(CMAKE_BUILD_TYPE "Release")
+# set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_BUILD_TYPE "Debug")
 #set(CMAKE_CXX_FLAGS "-std=c++11") # for ubuntu18.04
-set(CMAKE_CXX_FLAGS "-std=c++14") # for ubuntu20.04
+set(CMAKE_CXX_FLAGS "-std=c++17") # for ubuntu20.04
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g -pthread")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall -g -ggdb -pthread")
+# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -g -ggdb")
+list(APPEND CMAKE_PREFIX_PATH "/home/nyamori/myLib/libtorch")
+
+
 
 ######################
 ### Packages
@@ -36,6 +42,7 @@ find_package(catkin REQUIRED COMPONENTS
     message_generation
 )
 
+
 find_package(OpenMP REQUIRED)
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -44,6 +51,10 @@ find_package(GTSAM REQUIRED QUIET)
 find_package(Boost REQUIRED COMPONENTS filesystem program_options system timer)
 find_package(Boost REQUIRED COMPONENTS timer thread serialization chrono) # for ubuntu20.04
 find_package(ZLIB REQUIRED)
+find_package(Torch REQUIRED)
+
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 
 ######################
@@ -112,7 +123,7 @@ file(GLOB visual_loop_files
 )
 # Visual Feature Tracker
 add_executable(${PROJECT_NAME}_visual_feature ${visual_feature_files})
-target_link_libraries(${PROJECT_NAME}_visual_feature ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ZLIB::ZLIB)
+target_link_libraries(${PROJECT_NAME}_visual_feature ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ZLIB::ZLIB ${TORCH_LIBRARIES})
 # Visual Odometry
 add_executable(${PROJECT_NAME}_visual_odometry ${visual_odometry_files})
 target_link_libraries(${PROJECT_NAME}_visual_odometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES}) 
