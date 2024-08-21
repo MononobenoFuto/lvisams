@@ -40,6 +40,53 @@ int getLabelId(cv::Point2f &p, int shape) {
     return img_y * shape + img_x;
 }
 
+
+void delByDis(const vector<cv::Point2f> &un_cur_pts, const vector<cv::Point2f> &un_forw_pts, int cur_seq, vector<uchar> &status) {
+    std::ifstream file("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/data_odometry_poses/dataset/poses/05.txt");  // Replace with your file name
+
+    assert(file);
+
+    Eigen::Matrix<double, 3, 3> Ri, Rj;
+    Eigen::Matrix<double, 3, 1> ti, tj;
+
+    std::string line1, line2;
+    for(int i = 0; i <= cur_seq; i++) std::getline(file, line1);
+    
+    std::istringstream iss1(line1);
+    for(int i = 0; i < 3; i++ ) {
+        for(int j = 0; j < 4; j++) {
+            if(j < 3) iss1 >> Ri(i, j);
+            else iss1 >> ti(i);
+        }
+    }
+    std::getline(file, line2);
+    std::istringstream iss2(line2);
+    for(int i = 0; i < 3; i++ ) {
+        for(int j = 0; j < 4; j++) {
+            if(j < 3) iss2 >> Rj(i, j);
+            else iss2 >> tj(i, 0);
+        }
+    }
+
+    Ri = Rj.transpose() * Ri;
+    ti = Rj.transpose() * (ti - tj);
+
+    double A = Ri(0, 2), B = Ri(1, 2), x0, y0, dis;
+    
+    for(int i = 0; i < un_cur_pts.size(); i++) {
+        x0 = Ri(0, 0) * un_cur_pts[i].x + Ri(0, 1) * un_cur_pts[i].y + ti(0, 0);
+        y0 = Ri(1, 0) * un_cur_pts[i].x + Ri(1, 1) * un_cur_pts[i].y + ti(1, 0);
+        dis = fabs((un_forw_pts[i].x-x0)*B - (un_forw_pts[i].y-y0)*A) / std::sqrt(A*A + B*B);
+
+        double xx = un_cur_pts[i].x - un_forw_pts[i].x;
+        double yy = un_cur_pts[i].y - un_forw_pts[i].y;
+        if(xx*xx+yy*yy < 0.5) status.push_back(0); 
+        else {
+            if(dis > 5.0) status.push_back(0); else status.push_back(1);
+        }
+    }
+}
+
 FeatureTracker::FeatureTracker() {
 }
 
@@ -116,6 +163,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
     }
 
     forw_pts.clear();
+    _forw_pts.clear();
 
     if (cur_pts.size() > 0)
     {
@@ -123,17 +171,16 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
         vector<uchar> status;
         vector<float> err;
 
-
+        //AIFlow
         std::string flow_name = intToStringWithLeadingZeros(cur_seq) + ".npy";
         cnpy::NpyArray flow_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/flow/" + flow_name);
 
         float* flow_data = flow_label.data<float>();
         std::vector<size_t> shape = flow_label.shape;
 
-        for(auto &t: shape)
-            printf("%d ", t);
-        printf("\n");
-
+        // for(auto &t: shape)
+        //     printf("%d ", t);
+        // printf("\n");
 
         for (int i = 0; i < int(cur_pts.size()); i++) {
             if(!inBorder(cur_pts[i])) {
@@ -148,9 +195,9 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
             forw_pts.push_back(cv::Point2f(xx, yy));
         }
 
-        // vector<cv::Point2f> _forw_pts;
-        vector<uchar> _status;
-        cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, _forw_pts, _status, err, cv::Size(21, 21), 3);        
+
+        // vector<uchar> _status;
+        // cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, _forw_pts, _status, err, cv::Size(21, 21), 3);        
 
         // isprint.clear();
         // cv::Mat s_image;
@@ -168,14 +215,15 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
         // }
         // cv::imwrite("/home/nyamori/catkin_ws/info/mmm/" + intToStringWithLeadingZeros(cur_seq) + ".png", s_image);
 
-        for (int i = 0; i < int(forw_pts.size()); i++) {
-            if (status[i] && !inBorder(forw_pts[i]))
-                status[i] = 0;
+        for (int i = 0; i < int(forw_pts.size()); i++)
+        if (status[i]) {
+            if(!inBorder(forw_pts[i])) status[i] = 0;
         }
+
         reduceVector(prev_pts, status);
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
-        reduceVector(_forw_pts, status);
+        // reduceVector(_forw_pts, status);
         reduceVector(ids, status);
         reduceVector(cur_un_pts, status);
         reduceVector(track_cnt, status);
@@ -198,13 +246,12 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
 
     if (PUB_THIS_FRAME)
     {
-        rejectWithF();
         
         // std::string cur_label_name = intToStringWithLeadingZeros(cur_seq) + ".npy";
         // std::string forw_label_name = intToStringWithLeadingZeros(forw_seq) + ".npy";
 
-        // cnpy::NpyArray cur_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/05_npy/" + cur_label_name);
-        // cnpy::NpyArray forw_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/05_npy/" + forw_label_name);
+        // cnpy::NpyArray cur_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/npy/" + cur_label_name);
+        // cnpy::NpyArray forw_label = cnpy::npy_load("/media/nyamori/8856D74A56D73820/vslam/dataset/kitti/2011_09_30/npy/" + forw_label_name);
 
         // int* cur_label_data = cur_label.data<int>();
         // int* forw_label_data = forw_label.data<int>();
@@ -212,6 +259,21 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
         // vector<uchar> status;
         // int del_bylabel = 0, before_label = 0;
 
+
+        // for(int i = 0; i < int(cur_pts.size()); i++) {
+        //     status.push_back(1);
+        //     for(int tx = -1; tx <= 1; ++tx) for(int ty = -1; ty <= 1; ++ty)
+        //     if(abs(tx) + abs(ty) <= 1) {
+        //         cv::Point2f cur_pts_new(cur_pts[i].x+tx, cur_pts[i].y+ty);
+        //         if(!inBorder(cur_pts_new)) continue;
+        //         if (cur_label_data[getLabelId(cur_pts_new, shape[1])] > 10) {
+        //             status[i] = 0;
+        //         }
+        //     }
+        //     del_bylabel += (1-status[i]);
+
+        // }
+        // ROS_WARN("(%d/%d)\n", del_bylabel, before_label);
         // for (int i = 0; i < int(forw_pts.size()); i++) {
         //     ++before_label;
         //     status.push_back(0);
@@ -234,6 +296,8 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time, uint seq)
         // reduceVector(ids, status);
         // reduceVector(cur_un_pts, status);
         // reduceVector(track_cnt, status);
+
+        rejectWithF();
         
         ROS_DEBUG("set mask begins");
         TicToc t_m;
@@ -280,7 +344,7 @@ void FeatureTracker::rejectWithF()
         ROS_DEBUG("FM ransac begins");
         TicToc t_f;
         vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
-        vector<cv::Point2f> _un_forw_pts(_forw_pts.size());
+        // vector<cv::Point2f> _un_forw_pts(_forw_pts.size());
         for (unsigned int i = 0; i < cur_pts.size(); i++)
         {
             Eigen::Vector3d tmp_p;
@@ -295,36 +359,70 @@ void FeatureTracker::rejectWithF()
             un_forw_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
 
             
-            m_camera->liftProjective(Eigen::Vector2d(_forw_pts[i].x, _forw_pts[i].y), tmp_p);
-            tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
-            tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
-            _un_forw_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
+            // m_camera->liftProjective(Eigen::Vector2d(_forw_pts[i].x, _forw_pts[i].y), tmp_p);
+            // tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
+            // tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
+            // _un_forw_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
         }
 
+
+        // delByDis(un_cur_pts, un_forw_pts, cur_seq, status);
+
+        // cv::Mat s_image;
+        // s_image = cur_img;
+        // cv::cvtColor(s_image, s_image, cv::COLOR_GRAY2BGR);
+        // for(size_t i = 0; i < forw_pts.size(); i++) {
+        //     if(inBorder(forw_pts[i])) {
+        //         cv::arrowedLine(s_image, cur_pts[i], cv::Point2f(forw_pts[i].x, forw_pts[i].y), cv::Scalar(0, 0, 255),  status[i]+1, cv::LINE_8, 0, 0.1);
+        //     }
+        // }
+        // cv::imwrite("/home/nyamori/catkin_ws/info/dis/" + intToStringWithLeadingZeros(cur_seq) + ".png", s_image);
+
+        // cv::Mat s_image;
+        // cv::vconcat(cur_img, forw_img, s_image);
+        // cv::cvtColor(s_image, s_image, cv::COLOR_GRAY2BGR);
+        // for(size_t i = 0; i < forw_pts.size(); i++) {
+        //     if(inBorder(forw_pts[i])) {
+        //         cv::line(s_image, cur_pts[i], cv::Point2f(forw_pts[i].x, forw_pts[i].y+370), cv::Scalar(0, 0, 255),  status[i]+1);
+        //     }
+        // }
+        // cv::imwrite("/home/nyamori/catkin_ws/info/dis/" + intToStringWithLeadingZeros(cur_seq) + ".png", s_image);
+
+
+        // status.clear();
+        // reduceVector(prev_pts, status);
+        // reduceVector(cur_pts, status);
+        // reduceVector(forw_pts, status);
+        // reduceVector(cur_un_pts, status);
+        // reduceVector(ids, status);
+        // reduceVector(track_cnt, status);
+        
         vector<uchar> status, _status;
         cv::findFundamentalMat(un_cur_pts, un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, status);
-        puts("0");
-        cv::findFundamentalMat(un_cur_pts, _un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, _status);
+        // cv::findFundamentalMat(un_cur_pts, _un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, _status);
 
-
-        puts("1");
-        cv::Mat s_image;
-        cv::vconcat(cur_img, forw_img, s_image);
-        cv::cvtColor(s_image, s_image, cv::COLOR_GRAY2BGR);
-        puts("2");
-        for(size_t i = 0; i < forw_pts.size(); ++i) {
-            if(status[i] && inBorder(forw_pts[i]) && inBorder(_forw_pts[i])) {
-                float dis = cv::norm(forw_pts[i]-_forw_pts[i]);
-                if(dis < 5.0) continue;
-
-                cv::line(s_image, cur_pts[i], cv::Point2f(forw_pts[i].x, forw_pts[i].y+370), cv::Scalar(0, 0, 255),  status[i]*2+1);
-                cv::line(s_image, cur_pts[i], cv::Point2f(_forw_pts[i].x, _forw_pts[i].y+370), cv::Scalar(0, 255, 0), _status[i]*2+1);
-            }
+        for(int i = 0; i < un_cur_pts.size(); i++)
+        if(status[i]) {
+            double xx = un_cur_pts[i].x - un_forw_pts[i].x;
+            double yy = un_cur_pts[i].y - un_forw_pts[i].y;
+            if(xx*xx+yy*yy < 0.5) status[i] = 0;
         }
-        cv::imwrite("/home/nyamori/catkin_ws/info/mmm/" + intToStringWithLeadingZeros(cur_seq) + ".png", s_image);
-        puts("3");
 
-
+        // cv::Mat s_image;
+        // cv::vconcat(cur_img, forw_img, s_image);
+        // cv::cvtColor(s_image, s_image, cv::COLOR_GRAY2BGR);
+        // for(size_t i = 0; i < forw_pts.size(); ++i) {
+        //     if(status[i] && inBorder(forw_pts[i]) && inBorder(_forw_pts[i])) {
+        //         float dis = cv::norm(forw_pts[i]-_forw_pts[i]);
+        //         if(dis < 3.0) {
+        //             // cv::line(s_image, cur_pts[i], cv::Point2f(forw_pts[i].x, forw_pts[i].y+370), cv::Scalar(0, 0, 255),  status[i]+1);
+        //         } else {
+        //             cv::line(s_image, cur_pts[i], cv::Point2f(forw_pts[i].x, forw_pts[i].y+370), cv::Scalar(0, 0, 255),  status[i]+1);
+        //             // cv::line(s_image, cur_pts[i], cv::Point2f(_forw_pts[i].x, _forw_pts[i].y+370), cv::Scalar(0, 255, 0), _status[i]+1);
+        //         }
+        //     }
+        // }
+        // cv::imwrite("/home/nyamori/catkin_ws/info/mk3/" + intToStringWithLeadingZeros(cur_seq) + ".png", s_image);
 
 
         int size_a = cur_pts.size();
